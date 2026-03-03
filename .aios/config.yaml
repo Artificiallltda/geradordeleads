@@ -1,0 +1,19 @@
+# AIOS Project Configuration - Gerador de Leads
+# Version: 1.0.0
+
+project:
+  name: "Gerador de Leads"
+  id: "gerador-leads"
+  version: "1.0.0"
+  description: "Sistema de extração de leads multi-agente para Google Maps e LinkedIn"
+
+aios:
+  health_check:
+    enabled: true
+    interval: 3600 # 1 hora
+  
+# Placeholder para futuras configurações de LLM / Agentes
+agents:
+  enabled: true
+  provider: "deepseek"
+  model: "deepseek-chat"

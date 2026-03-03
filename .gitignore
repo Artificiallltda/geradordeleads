@@ -1,0 +1,6 @@
+node_modules
+.env
+.DS_Store
+*.log
+.aios/backups/*
+!.aios/backups/health-check
