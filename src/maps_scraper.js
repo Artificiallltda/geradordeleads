@@ -18,8 +18,9 @@ class MapsScraper {
     constructor() {
         this.apiKey = process.env.GOOGLE_PLACES_API_KEY;
         this.apiUrl = 'https://places.googleapis.com/v1/places:searchText';
-        
-        if (!this.apiKey) {
+        this.useMock = process.env.USE_MOCK === 'true';
+
+        if (!this.apiKey && !this.useMock) {
             throw new Error('ERRO: A variável de ambiente GOOGLE_PLACES_API_KEY não foi configurada no arquivo .env.');
         }
     }
@@ -31,6 +32,14 @@ class MapsScraper {
      */
     async searchPlaces(textQuery) {
         console.log(`[MAPS-SCRAPER] Iniciando busca por: "${textQuery}"...`);
+
+        if (this.useMock) {
+            console.log(`[MAPS-SCRAPER] 🧪 MODO MOCK: Retornando padarias de mentirinha para testes...`);
+            return this.formatLeads([
+                { id: 'mock_1', displayName: { text: `Empresa Teste 1 - ${textQuery}` }, formattedAddress: "Rua das Simulações, 100", rating: 4.9, websiteUri: "https://site-teste-1.com.br", internationalPhoneNumber: "+5511999999999" },
+                { id: 'mock_2', displayName: { text: `Super Empresa 2 (Mock)` }, formattedAddress: "Av. dos Testes, 200", rating: 4.5, websiteUri: "https://site-teste-2.com.br", internationalPhoneNumber: "+5511888888888" }
+            ]);
+        }
 
         try {
             // Documentação dos Fields: https://developers.google.com/maps/documentation/places/web-service/place-search-v1#fieldmask
@@ -86,11 +95,10 @@ if (require.main === module) {
         try {
             const termoBusca = process.argv[2] || "Clínicas de Estética em São Paulo";
             const leads = await scraper.searchPlaces(termoBusca);
-            
-            console.log('
---- Resultado da Extração (Primeiros 3 Leads) ---');
+
+            console.log(`\n--- Resultado da Extração(Primeiros 3 Leads) ---`);
             console.log(JSON.stringify(leads.slice(0, 3), null, 2));
-            
+
             // Aqui poderíamos salvar em arquivo no futuro se necessário
         } catch (err) {
             console.error('[MAIN] Erro:', err.message);

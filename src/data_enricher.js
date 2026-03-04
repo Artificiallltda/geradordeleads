@@ -11,13 +11,17 @@ const axios = require('axios');
 
 class DataEnricher {
     constructor() {
+        this.useMock = process.env.USE_MOCK === 'true';
         this.apiKey = process.env.GEMINI_API_KEY;
-        if (!this.apiKey) {
+
+        if (!this.apiKey && !this.useMock) {
             throw new Error('ERRO: A variável GEMINI_API_KEY não foi configurada.');
         }
 
-        const genAI = new GoogleGenerativeAI(this.apiKey);
-        this.model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+        if (!this.useMock) {
+            const genAI = new GoogleGenerativeAI(this.apiKey);
+            this.model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+        }
     }
 
     /**
@@ -46,6 +50,11 @@ class DataEnricher {
      * Usa o Gemini para transformar nomes jurídicos em nomes fantasia amigáveis.
      */
     async cleanCompanyName(rawName) {
+        if (this.useMock) {
+            console.log(`[ENRICHER] 🧪 MODO MOCK: Simulando limpeza do nome "${rawName}"...`);
+            return rawName.replace(' LTDA', '').replace(' ME', '') + ' (Tratado)';
+        }
+
         try {
             const prompt = `Você é um assistente comercial. Limpe o nome da empresa abaixo para ser usado em um CRM de vendas. 
             Remova termos jurídicos como LTDA, ME, S.A., EPP, LTDA - ME. 

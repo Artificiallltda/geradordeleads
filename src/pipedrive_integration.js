@@ -11,11 +11,12 @@ const axios = require('axios');
 
 class PipedriveIntegration {
     constructor() {
+        this.useMock = process.env.USE_MOCK === 'true';
         this.apiToken = process.env.PIPEDRIVE_API_TOKEN;
         this.companyDomain = 'company'; // Opcional, dependendo da URL da API
         this.baseUrl = `https://api.pipedrive.com/v1`;
 
-        if (!this.apiToken) {
+        if (!this.apiToken && !this.useMock) {
             throw new Error('ERRO: A variável de ambiente PIPEDRIVE_API_TOKEN não foi configurada.');
         }
     }
@@ -26,6 +27,12 @@ class PipedriveIntegration {
      */
     async syncLeads(leads) {
         console.log(`[PIPEDRIVE] Iniciando sincronização de ${leads.length} leads...`);
+
+        if (this.useMock) {
+            console.log(`[PIPEDRIVE] 🧪 MODO MOCK: Simulando criação de ${leads.length} deals no CRM...`);
+            return { criados: leads.length, ignorados: 0, erros: 0 };
+        }
+
         const results = { criados: 0, ignorados: 0, erros: 0 };
 
         for (const lead of leads) {
