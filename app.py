@@ -13,9 +13,6 @@ st.set_page_config(
 # Estilos Customizados (Opcional)
 st.markdown("""
     <style>
-    .main {
-        background-color: #f5f7f9;
-    }
     .stButton>button {
         width: 100%;
         border-radius: 5px;
