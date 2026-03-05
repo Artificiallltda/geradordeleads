@@ -93,12 +93,17 @@ class PipedriveIntegration {
      * Cria uma nova organização no Pipedrive.
      */
     async createOrganization(lead) {
-        const response = await this.http.post('/organizations', {
+        const body = {
             name: lead.nome,
-            address: lead.endereco,
-            phone: lead.telefone !== 'N/A' ? lead.telefone : null
-        });
+            address: lead.endereco
+        };
 
+        // Pipedrive exige telefone no formato array de objetos
+        if (lead.telefone && lead.telefone !== 'N/A') {
+            body.phone = [{ value: lead.telefone, primary: true, label: 'work' }];
+        }
+
+        const response = await this.http.post('/organizations', body);
         return response.data.data.id;
     }
 
@@ -108,14 +113,23 @@ class PipedriveIntegration {
     async createDeal(orgId, lead) {
         try {
             const origem = lead.origem || 'MAPS';
-            await this.http.post('/deals', {
+            const dealRes = await this.http.post('/deals', {
                 title: `[${origem}] ${lead.nome}`,
                 org_id: orgId,
-                status: 'open',
-                content: `<b>Site:</b> ${lead.site}<br><b>E-mail:</b> ${lead.email || 'N/A'}<br><b>Telefone:</b> ${lead.telefone}<br><b>Endereço:</b> ${lead.endereco}<br><b>Rating:</b> ${lead.rating || 'N/A'}`
+                status: 'open'
             });
+
+            const dealId = dealRes.data?.data?.id;
+
+            // Cria uma nota com as informações extras do lead (ex: site, email, rating)
+            if (dealId) {
+                await this.http.post('/notes', {
+                    content: `<b>Site:</b> ${lead.site || 'N/A'}<br><b>E-mail:</b> ${lead.email || 'N/A'}<br><b>Rating Google:</b> ${lead.rating || 'N/A'}<br><b>Origem:</b> ${lead.origem || 'N/A'}`,
+                    deal_id: dealId
+                });
+            }
         } catch (error) {
-            console.error('[PIPEDRIVE] ❌ Erro ao criar Negócio:', error.message);
+            console.error('[PIPEDRIVE] ❌ Erro ao criar Negócio/Nota:', error.message);
         }
     }
 }
