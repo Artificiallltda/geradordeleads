@@ -46,7 +46,7 @@ class ApifyScraper {
                 `${this.baseUrl}/acts/${this.actorId}/runs?waitForFinish=120`,
                 {
                     searchStringsArray: [textQuery],
-                    maxCrawledPlacesPerSearch: 20,
+                    maxCrawledPlacesPerSearch: 60,
                     language: 'pt-BR',
                     countryCode: 'br'
                 },
