@@ -15,12 +15,12 @@ class DataEnricher {
         this.apiKey = process.env.GEMINI_API_KEY;
 
         if (!this.apiKey && !this.useMock) {
-            throw new Error('ERRO: A variável GEMINI_API_KEY não foi configurada.');
+            throw new Error('ERRO: A variável GEMINI_API_KEY não foi configurada no arquivo .env.');
         }
 
         if (!this.useMock) {
             const genAI = new GoogleGenerativeAI(this.apiKey);
-            this.model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+            this.model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
         }
     }
 
@@ -30,7 +30,10 @@ class DataEnricher {
     async enrichLeads(leads) {
         console.log(`[ENRICHER] Enriquecendo ${leads.length} leads...`);
 
-        for (const lead of leads) {
+        for (let i = 0; i < leads.length; i++) {
+            const lead = leads[i];
+            console.log(`[ENRICHER] Processando lead ${i + 1}/${leads.length}: "${lead.nome}"`);
+
             // 1. Limpeza de Nome via IA (Gemini)
             lead.nome_original = lead.nome;
             lead.nome = await this.cleanCompanyName(lead.nome);

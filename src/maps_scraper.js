@@ -42,7 +42,6 @@ class MapsScraper {
         }
 
         try {
-            // Documentação dos Fields: https://developers.google.com/maps/documentation/places/web-service/place-search-v1#fieldmask
             const response = await axios.post(
                 this.apiUrl,
                 { textQuery },
@@ -51,7 +50,8 @@ class MapsScraper {
                         'Content-Type': 'application/json',
                         'X-Goog-Api-Key': this.apiKey,
                         'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.rating,places.websiteUri,places.internationalPhoneNumber,places.id'
-                    }
+                    },
+                    timeout: 10000
                 }
             );
 

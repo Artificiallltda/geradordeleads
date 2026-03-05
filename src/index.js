@@ -1,59 +1,95 @@
 /**
  * Agente Coordenador (Maestro) - Gerador de Leads
- * Versão: 1.3.0
- * 
- * Este arquivo centraliza o controle das operações de extração, enriquecimento e integração.
- * Suporta múltiplas origens: Maps ou LinkedIn.
+ * Versão: 2.0.0
+ *
+ * Centraliza o controle das operações de extração, enriquecimento e integração.
+ * Suporta múltiplas origens: maps, linkedin, apify.
  */
 
 const MapsScraper = require('./maps_scraper');
 const LinkedInScraper = require('./linkedin_scraper');
+const ApifyScraper = require('./apify_scraper');
 const DataEnricher = require('./data_enricher');
 const PipedriveIntegration = require('./pipedrive_integration');
 
+function log(emoji, modulo, msg) {
+    const ts = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    console.log(`[${ts}] ${emoji} [${modulo}] ${msg}`);
+}
+
 async function main() {
     const termoBusca = process.argv[2];
-    const fonte = process.argv[3] || 'maps'; // Default para maps
+    const fonte = (process.argv[3] || 'maps').toLowerCase();
 
     if (!termoBusca) {
-        console.error('Uso: npm start "Termo de Busca" [maps|linkedin]');
+        log('❌', 'MAESTRO', 'Uso: node src/index.js "Termo de Busca" [maps|linkedin|apify]');
         process.exit(1);
     }
+
+    log('🚀', 'MAESTRO', `Iniciando operação. Fonte: ${fonte.toUpperCase()} | Busca: "${termoBusca}"`);
 
     try {
         let rawLeads = [];
 
-        // Passo 1: Escolha do Scraper (Delegação)
-        if (fonte.toLowerCase() === 'linkedin') {
+        // ── PASSO 1: Extração ────────────────────────────────────────────────
+        log('🔍', 'MAESTRO', 'Passo 1/3 — Extraindo leads...');
+        if (fonte === 'linkedin') {
             const scraper = new LinkedInScraper();
             rawLeads = await scraper.searchPeople(termoBusca);
+        } else if (fonte === 'apify') {
+            const scraper = new ApifyScraper();
+            rawLeads = await scraper.searchPlaces(termoBusca);
         } else {
             const scraper = new MapsScraper();
             rawLeads = await scraper.searchPlaces(termoBusca);
         }
 
         if (rawLeads.length === 0) {
-            console.log('[MAESTRO] Nenhum lead encontrado. Encerrando.');
-            return;
+            log('⚠️', 'MAESTRO', 'Nenhum lead encontrado para este termo. Encerrando.');
+            process.exit(0);
         }
+        log('✅', 'MAESTRO', `${rawLeads.length} leads extraídos.`);
 
-        // Passo 2: Enriquecimento de Dados
+        // ── PASSO 2: Enriquecimento ──────────────────────────────────────────
+        log('🧠', 'MAESTRO', 'Passo 2/3 — Enriquecendo dados com IA...');
         const enricher = new DataEnricher();
         const enrichedLeads = await enricher.enrichLeads(rawLeads);
+        log('✅', 'MAESTRO', `${enrichedLeads.length} leads enriquecidos.`);
 
-        // Passo 3: Integração CRM
+        // ── PASSO 3: CRM ─────────────────────────────────────────────────────
+        log('📤', 'MAESTRO', 'Passo 3/3 — Sincronizando com Pipedrive CRM...');
         const crm = new PipedriveIntegration();
         const resPipedrive = await crm.syncLeads(enrichedLeads);
+        log('✅', 'MAESTRO', `CRM sincronizado.`);
+
+        // ── RESUMO FINAL ─────────────────────────────────────────────────────
+        const summary = {
+            fonte: fonte.toUpperCase(),
+            termo: termoBusca,
+            extraidos: rawLeads.length,
+            enriquecidos: enrichedLeads.length,
+            crm_criados: resPipedrive.criados,
+            crm_ignorados: resPipedrive.ignorados,
+            crm_erros: resPipedrive.erros,
+            leads: enrichedLeads
+        };
 
         console.log('\n=============================================');
         console.log(`RESUMO DA OPERAÇÃO (${fonte.toUpperCase()}):`);
-        console.log(`- Leads extraídos: ${rawLeads.length}`);
-        console.log(`- Sincronizados no CRM: ${resPipedrive.criados + resPipedrive.ignorados}`);
-        console.log('\nSquad GeanAIOS - Operação Concluída.');
-        console.log('=============================================\n');
+        console.log(`- Leads extraídos   : ${summary.extraidos}`);
+        console.log(`- Leads enriquecidos: ${summary.enriquecidos}`);
+        console.log(`- CRM — Criados     : ${summary.crm_criados}`);
+        console.log(`- CRM — Ignorados   : ${summary.crm_ignorados}`);
+        console.log(`- CRM — Erros       : ${summary.crm_erros}`);
+        console.log('=============================================');
+        // JSON estruturado para o app.py capturar
+        console.log('__SUMMARY_JSON__' + JSON.stringify(summary));
 
     } catch (error) {
-        console.error('\n[MAESTRO] Falha crítica no fluxo:', error.message);
+        log('💥', 'MAESTRO', `Falha crítica: ${error.message}`);
+        if (process.env.NODE_ENV !== 'production') {
+            console.error(error.stack);
+        }
         process.exit(1);
     }
 }

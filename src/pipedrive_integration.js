@@ -1,9 +1,11 @@
 /**
  * Agente de Integração CRM (O Vendedor Interno)
- * Versão: 1.0.0
- * 
+ * Versão: 2.0.0
+ *
  * Responsável por garantir que os leads sejam cadastrados corretamente no Pipedrive,
  * evitando duplicidade de Organizações.
+ *
+ * SEGURANÇA: O api_token é enviado via header (x-api-token) e nunca fica exposto na URL.
  */
 
 require('dotenv').config();
@@ -13,17 +15,25 @@ class PipedriveIntegration {
     constructor() {
         this.useMock = process.env.USE_MOCK === 'true';
         this.apiToken = process.env.PIPEDRIVE_API_TOKEN;
-        this.companyDomain = 'company'; // Opcional, dependendo da URL da API
-        this.baseUrl = `https://api.pipedrive.com/v1`;
+        this.baseUrl = 'https://api.pipedrive.com/v1';
 
         if (!this.apiToken && !this.useMock) {
-            throw new Error('ERRO: A variável de ambiente PIPEDRIVE_API_TOKEN não foi configurada.');
+            throw new Error('ERRO: A variável de ambiente PIPEDRIVE_API_TOKEN não foi configurada no arquivo .env.');
         }
+
+        // Instância axios com header de autenticação seguro (não expõe token na URL)
+        this.http = axios.create({
+            baseURL: this.baseUrl,
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-token': this.apiToken || ''
+            },
+            timeout: 15000
+        });
     }
 
     /**
      * Fluxo principal: Processa uma lista de leads para o Pipedrive.
-     * @param {Array} leads Lista de leads vindos do Scraper.
      */
     async syncLeads(leads) {
         console.log(`[PIPEDRIVE] Iniciando sincronização de ${leads.length} leads...`);
@@ -43,21 +53,18 @@ class PipedriveIntegration {
                 if (!orgId) {
                     // 2. Criar Organização se não existir
                     orgId = await this.createOrganization(lead);
-                    console.log(`[PIPEDRIVE] Organização criada: ${lead.nome} (ID: ${orgId})`);
+                    console.log(`[PIPEDRIVE] ✅ Organização criada: ${lead.nome} (ID: ${orgId})`);
                     results.criados++;
                 } else {
-                    console.log(`[PIPEDRIVE] Organização já existente: ${lead.nome} (ID: ${orgId}). Ignorando criação.`);
+                    console.log(`[PIPEDRIVE] ⏭️  Já existe: ${lead.nome} (ID: ${orgId}). Ignorando.`);
                     results.ignorados++;
-                    // Opcional: Poderíamos atualizar os dados aqui se necessário
                 }
 
                 // 3. Criar Negócio (Deal) atrelado à Organização
-                // Nota: Criamos o Deal mesmo se a Org já existe, pois pode ser uma nova prospecção,
-                // mas isso pode ser ajustado conforme a regra de negócio.
                 await this.createDeal(orgId, lead);
 
             } catch (error) {
-                console.error(`[PIPEDRIVE] Erro ao processar lead ${lead.nome}:`, error.message);
+                console.error(`[PIPEDRIVE] ❌ Erro ao processar "${lead.nome}": ${error.message}`);
                 results.erros++;
             }
         }
@@ -70,16 +77,11 @@ class PipedriveIntegration {
      */
     async findOrganization(name) {
         try {
-            const response = await axios.get(`${this.baseUrl}/organizations/search`, {
-                params: {
-                    term: name,
-                    fields: 'name',
-                    exact_match: true,
-                    api_token: this.apiToken
-                }
+            const response = await this.http.get('/organizations/search', {
+                params: { term: name, fields: 'name', exact_match: true }
             });
 
-            const items = response.data.data.items;
+            const items = response.data?.data?.items || [];
             return items.length > 0 ? items[0].item.id : null;
         } catch (error) {
             console.error('[PIPEDRIVE] Erro na busca de organização:', error.message);
@@ -91,7 +93,7 @@ class PipedriveIntegration {
      * Cria uma nova organização no Pipedrive.
      */
     async createOrganization(lead) {
-        const response = await axios.post(`${this.baseUrl}/organizations?api_token=${this.apiToken}`, {
+        const response = await this.http.post('/organizations', {
             name: lead.nome,
             address: lead.endereco,
             phone: lead.telefone !== 'N/A' ? lead.telefone : null
@@ -105,16 +107,15 @@ class PipedriveIntegration {
      */
     async createDeal(orgId, lead) {
         try {
-            // Título do negócio segue o padrão: [MAPS] Nome da Empresa
-            await axios.post(`${this.baseUrl}/deals?api_token=${this.apiToken}`, {
-                title: `[MAPS] ${lead.nome}`,
+            const origem = lead.origem || 'MAPS';
+            await this.http.post('/deals', {
+                title: `[${origem}] ${lead.nome}`,
                 org_id: orgId,
                 status: 'open',
-                // Adicionando informações extras nas notas do negócio
-                content: `<b>Site:</b> ${lead.site}<br><b>E-mail Capturado:</b> ${lead.email || 'N/A'}<br><b>Telefone:</b> ${lead.telefone}<br><b>Endereço:</b> ${lead.endereco}`
+                content: `<b>Site:</b> ${lead.site}<br><b>E-mail:</b> ${lead.email || 'N/A'}<br><b>Telefone:</b> ${lead.telefone}<br><b>Endereço:</b> ${lead.endereco}<br><b>Rating:</b> ${lead.rating || 'N/A'}`
             });
         } catch (error) {
-            console.error('[PIPEDRIVE] Erro ao criar Negócio:', error.message);
+            console.error('[PIPEDRIVE] ❌ Erro ao criar Negócio:', error.message);
         }
     }
 }
