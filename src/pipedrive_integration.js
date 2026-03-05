@@ -46,6 +46,15 @@ class PipedriveIntegration {
         const results = { criados: 0, ignorados: 0, erros: 0 };
 
         for (const lead of leads) {
+            // Validacao: pula leads sem nome (Pipedrive rejeita com 400)
+            if (!lead.nome || typeof lead.nome !== 'string' || lead.nome.trim() === '') {
+                console.warn(`[PIPEDRIVE] ⚠️  Lead ignorado por falta de nome:`, JSON.stringify(lead));
+                results.ignorados++;
+                continue;
+            }
+
+            lead.nome = lead.nome.trim();
+
             try {
                 // 1. Verificar se a Organização já existe
                 let orgId = await this.findOrganization(lead.nome);
@@ -64,7 +73,11 @@ class PipedriveIntegration {
                 await this.createDeal(orgId, lead);
 
             } catch (error) {
-                console.error(`[PIPEDRIVE] ❌ Erro ao processar "${lead.nome}": ${error.message}`);
+                const apiMsg = error.response?.data?.error || error.message;
+                console.error(`[PIPEDRIVE] ❌ Erro ao processar "${lead.nome}": ${apiMsg}`);
+                if (error.response?.status === 400) {
+                    console.error(`[PIPEDRIVE] Payload rejeitado:`, JSON.stringify(error.response?.data));
+                }
                 results.erros++;
             }
         }

@@ -20,7 +20,8 @@ class DataEnricher {
 
         if (!this.useMock) {
             const genAI = new GoogleGenerativeAI(this.apiKey);
-            this.model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            // gemini-1.5-flash nao existe — usar gemini-2.0-flash (modelo estavel atual)
+            this.model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
         }
     }
 
