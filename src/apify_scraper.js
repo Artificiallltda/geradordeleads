@@ -47,7 +47,7 @@ class ApifyScraper {
                 {
                     searchStringsArray: [textQuery],
                     maxCrawledPlacesPerSearch: 20,
-                    language: 'pt',
+                    language: 'pt-BR',
                     countryCode: 'br'
                 },
                 {
