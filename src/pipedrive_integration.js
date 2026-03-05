@@ -1,9 +1,12 @@
 /**
  * Agente de Integração CRM (O Vendedor Interno)
- * Versão: 2.0.0
+ * Versão: 3.0.0
  *
- * Responsável por garantir que os leads sejam cadastrados corretamente no Pipedrive,
- * evitando duplicidade de Organizações.
+ * Fluxo correto da API do Pipedrive:
+ *   1. Organização  → nome, endereço
+ *   2. Person       → nome de contato, telefone, email (vinculado à Organização)
+ *   3. Deal         → negócio vinculado à Organização + Person
+ *   4. Nota         → site, rating e origem do lead
  *
  * SEGURANÇA: O api_token é enviado via header (x-api-token) e nunca fica exposto na URL.
  */
@@ -60,7 +63,7 @@ class PipedriveIntegration {
                 let orgId = await this.findOrganization(lead.nome);
 
                 if (!orgId) {
-                    // 2. Criar Organização se não existir
+                    // 2. Criar Organização (nome + endereço apenas)
                     orgId = await this.createOrganization(lead);
                     console.log(`[PIPEDRIVE] ✅ Organização criada: ${lead.nome} (ID: ${orgId})`);
                     results.criados++;
@@ -69,8 +72,14 @@ class PipedriveIntegration {
                     results.ignorados++;
                 }
 
-                // 3. Criar Negócio (Deal) atrelado à Organização
-                await this.createDeal(orgId, lead);
+                // 3. Criar Person (contato) com telefone e email nativos, vinculado à Organização
+                const personId = await this.createPerson(orgId, lead);
+                if (personId) {
+                    console.log(`[PIPEDRIVE] 👤 Contato criado: ${lead.nome} (Person ID: ${personId})`);
+                }
+
+                // 4. Criar Negócio (Deal) vinculado à Organização + Person
+                await this.createDeal(orgId, personId, lead);
 
             } catch (error) {
                 const apiMsg = error.response?.data?.error || error.message;
@@ -104,40 +113,71 @@ class PipedriveIntegration {
 
     /**
      * Cria uma nova organização no Pipedrive.
+     * NOTA: Organizações NÃO aceitam phone/email — esses campos ficam na Person.
      */
     async createOrganization(lead) {
         const body = {
             name: lead.nome,
-            address: lead.endereco
+            address: lead.endereco || undefined
         };
-
-        // Pipedrive exige telefone no formato array de objetos
-        if (lead.telefone && lead.telefone !== 'N/A') {
-            body.phone = [{ value: lead.telefone, primary: true, label: 'work' }];
-        }
 
         const response = await this.http.post('/organizations', body);
         return response.data.data.id;
     }
 
     /**
-     * Cria um negócio (Deal) no funil padrão.
+     * Cria uma Person (Contato) vinculada à Organização.
+     * É aqui que telefone e e-mail são armazenados como campos nativos do Pipedrive.
      */
-    async createDeal(orgId, lead) {
+    async createPerson(orgId, lead) {
+        try {
+            const body = {
+                name: lead.nome,
+                org_id: orgId
+            };
+
+            // Telefone como campo nativo da Person (formato exigido pela API)
+            if (lead.telefone && lead.telefone !== 'N/A') {
+                body.phone = [{ value: lead.telefone, primary: true, label: 'work' }];
+            }
+
+            // E-mail como campo nativo da Person
+            if (lead.email && lead.email !== 'N/A') {
+                body.email = [{ value: lead.email, primary: true, label: 'work' }];
+            }
+
+            const response = await this.http.post('/persons', body);
+            return response.data?.data?.id || null;
+        } catch (error) {
+            console.error('[PIPEDRIVE] ⚠️  Erro ao criar contato (Person):', error.response?.data?.error || error.message);
+            return null; // Não bloqueia a criação do Deal
+        }
+    }
+
+    /**
+     * Cria um negócio (Deal) vinculado à Organização e à Person.
+     */
+    async createDeal(orgId, personId, lead) {
         try {
             const origem = lead.origem || 'MAPS';
-            const dealRes = await this.http.post('/deals', {
+            const dealPayload = {
                 title: `[${origem}] ${lead.nome}`,
                 org_id: orgId,
                 status: 'open'
-            });
+            };
 
+            // Vincula o Deal ao contato (Person) se existir
+            if (personId) {
+                dealPayload.person_id = personId;
+            }
+
+            const dealRes = await this.http.post('/deals', dealPayload);
             const dealId = dealRes.data?.data?.id;
 
-            // Cria uma nota com as informações extras do lead (ex: site, email, rating)
+            // Cria uma nota com informações complementares do lead
             if (dealId) {
                 await this.http.post('/notes', {
-                    content: `<b>Site:</b> ${lead.site || 'N/A'}<br><b>E-mail:</b> ${lead.email || 'N/A'}<br><b>Rating Google:</b> ${lead.rating || 'N/A'}<br><b>Origem:</b> ${lead.origem || 'N/A'}`,
+                    content: `<b>Site:</b> ${lead.site || 'N/A'}<br><b>Rating Google:</b> ${lead.rating || 'N/A'}<br><b>Origem:</b> ${lead.origem || 'N/A'}`,
                     deal_id: dealId
                 });
             }
